@@ -1,0 +1,1 @@
+-- Seed data is included in the baseline migration so it is idempotent on remote projects.

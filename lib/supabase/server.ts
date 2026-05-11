@@ -1,0 +1,40 @@
+import "server-only";
+
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+
+import { getSupabasePublicEnv, getSupabaseServiceEnv } from "@/lib/supabase/env";
+
+export async function createClient() {
+  const cookieStore = await cookies();
+  const { url, publishableKey } = getSupabasePublicEnv();
+
+  return createServerClient(url, publishableKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch {
+          // Server Components cannot set cookies. Proxy refreshes auth cookies.
+        }
+      },
+    },
+  });
+}
+
+export function createAdminClient() {
+  const { url, serviceRoleKey } = getSupabaseServiceEnv();
+
+  return createServiceClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
