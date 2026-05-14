@@ -47,7 +47,7 @@ export type Database = {
       issues: {
         Row: {
           id: string;
-          group_code: "A" | "B" | "C" | "D" | "E";
+          group_code: string;
           slug: string;
           title: string;
           description: string;
@@ -71,14 +71,14 @@ export type Database = {
         Row: {
           id: string;
           class_id: string;
-          code: "A" | "B" | "C" | "D" | "E";
+          code: string;
           name: string;
           issue_id: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["groups"]["Row"]> & {
           class_id: string;
-          code: "A" | "B" | "C" | "D" | "E";
+          code: string;
           name: string;
         };
         Update: Partial<Database["public"]["Tables"]["groups"]["Insert"]>;
@@ -156,7 +156,7 @@ export type Database = {
           student_name: string;
           class_id: string | null;
           class_code: string | null;
-          group_code: "A" | "B" | "C" | "D" | "E";
+          group_code: string;
           issue_id: string | null;
           role_card_id: string | null;
           status: "registered" | "issue" | "stimulus" | "role" | "discussion" | "final" | "completed";
@@ -168,7 +168,7 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["student_sessions"]["Row"]> & {
           student_user_id: string;
           student_name: string;
-          group_code: "A" | "B" | "C" | "D" | "E";
+          group_code: string;
         };
         Update: Partial<Database["public"]["Tables"]["student_sessions"]["Insert"]>;
       };

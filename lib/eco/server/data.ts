@@ -45,6 +45,7 @@ export type StudentState = StudentCatalog & {
 
 export type AdminDataset = {
   profile: Pick<ProfileRow, "full_name" | "role">;
+  groupCodes: GroupCode[];
   students: AdminStudentRow[];
   studentPage: {
     page: number;
@@ -466,6 +467,12 @@ export async function getAdminDataset(
   }
 
   const sessions = (sessionsResult.data ?? []) as StudentSessionRow[];
+  const groupCodes = Array.from(
+    new Set([
+      ...(issuesResult.data ?? []).map((issue) => issue.group_code),
+      ...sessions.map((session) => session.group_code),
+    ]),
+  ).sort((left, right) => left.localeCompare(right, "id-ID"));
   const allStudents = sessions.map((session) => {
     const studentProfile = profiles.get(session.student_user_id);
     const issue = session.issue_id ? issues.get(session.issue_id) : undefined;
@@ -496,6 +503,7 @@ export async function getAdminDataset(
       full_name: profile.full_name,
       role: profile.role,
     },
+    groupCodes,
     students: pagedStudents.students,
     studentPage: {
       page: options.page,

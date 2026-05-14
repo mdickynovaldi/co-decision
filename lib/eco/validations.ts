@@ -1,6 +1,15 @@
 import { z } from "zod";
 
-export const groupCodeSchema = z.enum(["A", "B", "C", "D", "E"]);
+export const groupCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .min(1, "Kode kelompok belum diisi.")
+  .max(12, "Kode kelompok maksimal 12 karakter.")
+  .regex(
+    /^[A-Z0-9][A-Z0-9_-]*$/,
+    "Kode kelompok hanya boleh huruf, angka, - atau _, dan harus diawali huruf/angka.",
+  );
 export const uuidSchema = z.uuid("ID tidak valid.");
 export const studentStatusSchema = z.enum([
   "registered",
@@ -155,6 +164,10 @@ export const contentDeleteSchema = z.object({
   id: uuidSchema,
 });
 
+export const groupDeleteSchema = z.object({
+  groupCode: groupCodeSchema,
+});
+
 export const reflectionQuestionContentSchema = z.object({
   questionId: uuidSchema,
   issueId: uuidSchema.optional().or(z.literal("")),
@@ -213,7 +226,7 @@ export const stimulusAssetCreateSchema = stimulusAssetContentSchema.omit({
 
 export const adminStudentQuerySchema = z.object({
   query: z.string().trim().max(100).default(""),
-  groupCode: z.union([groupCodeSchema, z.literal("all")]).default("all"),
+  groupCode: z.union([z.literal("all"), groupCodeSchema]).default("all"),
   status: z.union([studentStatusSchema, z.literal("all")]).default("all"),
   sortBy: z
     .enum(["studentName", "groupCode", "status", "progressPercent", "updatedAt"])
@@ -225,7 +238,7 @@ export const adminStudentQuerySchema = z.object({
 
 export const exportSchema = z.object({
   format: z.enum(["csv", "xlsx"]).default("csv"),
-  groupCode: z.union([groupCodeSchema, z.literal("all")]).default("all"),
+  groupCode: z.union([z.literal("all"), groupCodeSchema]).default("all"),
   status: z.union([studentStatusSchema, z.literal("all")]).default("all"),
 });
 

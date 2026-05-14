@@ -51,7 +51,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   getIssueByGroup,
   issues as fallbackIssues,
-  groupCodes,
+  groupCodes as fallbackGroupCodes,
   recommendedActions,
   reflectionQuestions as fallbackReflectionQuestions,
   roleCards as fallbackRoleCards,
@@ -130,7 +130,9 @@ export function StudentFlow({
 
   if (page === "mulai") return <StartPage progress={progress} />;
   if (page === "masuk") return <LoginPage onState={setState} />;
-  if (page === "registrasi") return <RegistrationPage onState={setState} />;
+  if (page === "registrasi") {
+    return <RegistrationPage catalog={catalog} onState={setState} />;
+  }
 
   if (loading) return <StudentLoading />;
   if (error) return <StudentError message={error} />;
@@ -224,6 +226,14 @@ function findIssue(catalog: StudentCatalog, issueId?: string) {
   return catalog.issues.find((issue) => issue.id === issueId);
 }
 
+function getCatalogGroupCodes(catalog: StudentCatalog) {
+  const codes = Array.from(
+    new Set(catalog.issues.map((issue) => issue.groupCode)),
+  ).sort((left, right) => left.localeCompare(right, "id-ID"));
+
+  return codes.length ? codes : fallbackGroupCodes;
+}
+
 function findRole(catalog: StudentCatalog, roleCardId?: string) {
   return catalog.roleCards.find((role) => role.id === roleCardId);
 }
@@ -309,12 +319,15 @@ function StartPage({ progress }: { progress?: StudentProgress }) {
 }
 
 function RegistrationPage({
+  catalog,
   onState,
 }: {
+  catalog: StudentCatalog;
   onState: (state: StudentBackendState) => void;
 }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
+  const availableGroupCodes = getCatalogGroupCodes(catalog);
   const form = useForm<RegistrationFormValues>({
     resolver: zodResolver(registrationSchema),
     defaultValues: {
@@ -425,7 +438,7 @@ function RegistrationPage({
                         <SelectValue placeholder="Pilih kelompok" />
                       </SelectTrigger>
                       <SelectContent>
-                        {groupCodes.map((code) => (
+                        {availableGroupCodes.map((code) => (
                           <SelectItem key={code} value={code}>
                             Kelompok {code}
                           </SelectItem>

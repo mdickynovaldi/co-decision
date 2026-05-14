@@ -5,6 +5,7 @@ import { getAdminDataset, getCurrentProfile, getCurrentUser } from "@/lib/eco/se
 import {
   adminStudentQuerySchema,
   contentDeleteSchema,
+  groupDeleteSchema,
   issueContentSchema,
   issueCreateSchema,
   loginSchema,
@@ -197,6 +198,23 @@ export async function POST(request: Request) {
 
       if (error) throw error;
 
+      const { data: activeClasses } = await supabase
+        .from("classes")
+        .select("id")
+        .eq("is_active", true);
+
+      if (activeClasses?.length) {
+        await supabase.from("groups").upsert(
+          activeClasses.map((classRow) => ({
+            class_id: classRow.id,
+            code: values.groupCode,
+            name: `Kelompok ${values.groupCode}`,
+            issue_id: data.id,
+          })),
+          { onConflict: "class_id,code" },
+        );
+      }
+
       await writeAudit(
         supabase,
         user.id,
@@ -204,6 +222,31 @@ export async function POST(request: Request) {
         "issue",
         data.id,
         "Konten isu baru dibuat.",
+      );
+
+      return ok(await getAdminDataset(supabase));
+    }
+
+    if (body.action === "deleteGroup") {
+      const values = groupDeleteSchema.parse(body.payload);
+      const { supabase, user } = await requireStaff();
+
+      const { error: issuesError } = await supabase
+        .from("issues")
+        .delete()
+        .eq("group_code", values.groupCode);
+
+      if (issuesError) throw issuesError;
+
+      await supabase.from("groups").delete().eq("code", values.groupCode);
+
+      await writeAudit(
+        supabase,
+        user.id,
+        "content.delete_group",
+        "group",
+        null,
+        `Kelompok ${values.groupCode} dan konten isunya dihapus.`,
       );
 
       return ok(await getAdminDataset(supabase));

@@ -1,4 +1,4 @@
-export type GroupCode = "A" | "B" | "C" | "D" | "E";
+export type GroupCode = string;
 
 export type StudentStatus =
   | "registered"

@@ -66,6 +66,7 @@ import {
   createRoleCard,
   createStimulusAsset,
   deleteContentItem,
+  deleteGroupContent,
   getAdminDataset,
   saveIssueContent,
   saveReflectionQuestion,
@@ -75,7 +76,7 @@ import {
   signInAdmin,
 } from "@/lib/eco/client-api";
 import type { AdminDataset } from "@/lib/eco/server/data";
-import { groupCodes, rubricCriteria } from "@/lib/eco/mock-data";
+import { groupCodes as fallbackGroupCodes, rubricCriteria } from "@/lib/eco/mock-data";
 import type {
   AdminStudentRow,
   GroupCode,
@@ -215,7 +216,7 @@ export function AdminShell({
           {page === "konten" ? (
             <ContentPage data={data} onData={setData} />
           ) : null}
-          {page === "export" ? <ExportPage /> : null}
+          {page === "export" ? <ExportPage data={data} /> : null}
           {page === "audit-log" ? <AuditLogPage data={data} /> : null}
         </>
       ) : null}
@@ -447,6 +448,9 @@ function StudentsPage({
   data: AdminDataset;
   onData: (data: AdminBackendState) => void;
 }) {
+  const availableGroupCodes = data.groupCodes.length
+    ? data.groupCodes
+    : fallbackGroupCodes;
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<"all" | GroupCode>("all");
   const [status, setStatus] = useState<"all" | StudentStatus>("all");
@@ -510,6 +514,7 @@ function StudentsPage({
       actions={
         <StudentFilters
           query={query}
+          groupCodes={availableGroupCodes}
           group={group}
           status={status}
           onQuery={(value) => {
@@ -900,6 +905,7 @@ function ContentPage({
   const selectedIssue =
     data.issues.find((issue) => issue.id === selectedIssueId) ?? data.issues[0];
   const [serverMessage, setServerMessage] = useState("");
+  const [deleteArmedGroup, setDeleteArmedGroup] = useState<string | null>(null);
   const form = useForm<IssueContentFormValues>({
     resolver: zodResolver(issueContentSchema),
     values: selectedIssue
@@ -925,6 +931,31 @@ function ContentPage({
         requestError instanceof Error
           ? requestError.message
           : "Konten belum tersimpan.",
+      );
+    }
+  }
+
+  async function onDeleteSelectedGroup() {
+    if (!selectedIssue) return;
+    if (deleteArmedGroup !== selectedIssue.groupCode) {
+      setDeleteArmedGroup(selectedIssue.groupCode);
+      setServerMessage(
+        `Klik sekali lagi untuk menghapus Kelompok ${selectedIssue.groupCode} beserta isi isunya.`,
+      );
+      return;
+    }
+
+    setServerMessage("");
+    try {
+      const nextData = await deleteGroupContent(selectedIssue.groupCode);
+      onData(nextData);
+      setDeleteArmedGroup(null);
+      setServerMessage(`Kelompok ${selectedIssue.groupCode} sudah dihapus.`);
+    } catch (requestError) {
+      setServerMessage(
+        requestError instanceof Error
+          ? requestError.message
+          : "Kelompok belum dihapus.",
       );
     }
   }
@@ -1036,6 +1067,41 @@ function ContentPage({
                 {form.formState.isSubmitting ? "Menyimpan..." : "Simpan konten"}
               </Button>
             </form>
+            <div className="mt-6 border-t border-border pt-4">
+              <p className="text-sm font-medium text-eco-ink">
+                Hapus kelompok daftar isu
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Menghapus Kelompok {selectedIssue.groupCode} akan menghapus semua
+                isu, stimulus, dan pertanyaan refleksi yang memakai kode kelompok
+                ini.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="h-10 rounded-xl"
+                  onClick={onDeleteSelectedGroup}
+                >
+                  {deleteArmedGroup === selectedIssue.groupCode
+                    ? "Konfirmasi hapus"
+                    : "Hapus kelompok & isi"}
+                </Button>
+                {deleteArmedGroup === selectedIssue.groupCode ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-xl"
+                    onClick={() => {
+                      setDeleteArmedGroup(null);
+                      setServerMessage("");
+                    }}
+                  >
+                    Batal
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1094,24 +1160,14 @@ function CreateIssueCard({
       </CardHeader>
       <CardContent>
         <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-          <Controller
-            control={form.control}
-            name="groupCode"
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className="h-11 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {groupCodes.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      Kelompok {code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+          <LabeledInput
+            label="Kode kelompok"
+            id="newIssueGroupCode"
+            register={form.register("groupCode")}
           />
+          <p className="text-xs leading-5 text-muted-foreground">
+            Pakai kode baru seperti F atau BIO-1 untuk membuat kelompok baru.
+          </p>
           <LabeledInput
             label="Slug"
             id="newIssueSlug"
@@ -1121,6 +1177,11 @@ function CreateIssueCard({
             label="Judul"
             id="newIssueTitle"
             register={form.register("title")}
+          />
+          <LabeledInput
+            label="Deskripsi"
+            id="newIssueDescription"
+            register={form.register("description")}
           />
           <Textarea
             className="min-h-24 rounded-xl"
@@ -1661,7 +1722,10 @@ function RoleCardManager({
   );
 }
 
-function ExportPage() {
+function ExportPage({ data }: { data: AdminDataset }) {
+  const availableGroupCodes = data.groupCodes.length
+    ? data.groupCodes
+    : fallbackGroupCodes;
   const [format, setFormat] = useState<"csv" | "xlsx">("csv");
   const [groupCode, setGroupCode] = useState<"all" | GroupCode>("all");
   const [status, setStatus] = useState<"all" | StudentStatus>("all");
@@ -1691,7 +1755,7 @@ function ExportPage() {
             onValue={(value) => setGroupCode(value as "all" | GroupCode)}
           >
             <SelectItem value="all">Semua kelompok</SelectItem>
-            {groupCodes.map((code) => (
+            {availableGroupCodes.map((code) => (
               <SelectItem key={code} value={code}>
                 Kelompok {code}
               </SelectItem>
@@ -1844,6 +1908,7 @@ function MetricCard({
 
 function StudentFilters({
   query,
+  groupCodes,
   group,
   status,
   onQuery,
@@ -1851,6 +1916,7 @@ function StudentFilters({
   onStatus,
 }: {
   query: string;
+  groupCodes: GroupCode[];
   group: "all" | GroupCode;
   status: "all" | StudentStatus;
   onQuery: (value: string) => void;

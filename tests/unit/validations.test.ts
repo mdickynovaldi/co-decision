@@ -4,6 +4,7 @@ import {
   discussionSchema,
   exportSchema,
   finalSolutionSchema,
+  groupCodeSchema,
   loginSchema,
   registrationSchema,
   rubricSchema,
@@ -35,6 +36,12 @@ describe("Eco-Decision validation schemas", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("accepts dynamic group codes", () => {
+    expect(groupCodeSchema.parse("f")).toBe("F");
+    expect(groupCodeSchema.parse("BIO-1")).toBe("BIO-1");
+    expect(groupCodeSchema.safeParse("kelompok baru").success).toBe(false);
   });
 
   it("validates login payload", () => {

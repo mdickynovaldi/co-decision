@@ -144,6 +144,10 @@ export function deleteContentItem(kind: "issue" | "question" | "role" | "asset",
   return adminAction<AdminDataset>("deleteContent", { kind, id });
 }
 
+export function deleteGroupContent(groupCode: string) {
+  return adminAction<AdminDataset>("deleteGroup", { groupCode });
+}
+
 export function saveReflectionQuestion(values: ReflectionQuestionContentFormValues) {
   return adminAction<AdminDataset>("saveReflectionQuestion", values);
 }
