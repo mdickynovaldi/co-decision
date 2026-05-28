@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -56,6 +57,10 @@ import {
   reflectionQuestions as fallbackReflectionQuestions,
   roleCards as fallbackRoleCards,
 } from "@/lib/eco/mock-data";
+import {
+  getPrimaryStimulusAsset,
+  getYoutubeThumbnailUrl,
+} from "@/lib/eco/media";
 import {
   registerStudent,
   saveDiscussion,
@@ -719,6 +724,10 @@ function StimulusPage({
 }) {
   const router = useRouter();
   const issue = findIssue(catalog, progress.issueId) ?? findIssueByGroup(catalog, progress.groupCode);
+  const primaryAsset = useMemo(
+    () => getPrimaryStimulusAsset(catalog.stimulusAssets, issue.id),
+    [catalog.stimulusAssets, issue.id],
+  );
   const defaultAnswers = useMemo(() => {
     return Object.fromEntries(
       catalog.reflectionQuestions.map((question) => [
@@ -773,22 +782,7 @@ function StimulusPage({
     >
       <Card>
         <CardContent className="grid gap-5 p-6 lg:grid-cols-[280px_1fr]">
-          <div
-            className={cn(
-              "grid min-h-56 place-items-center rounded-xl bg-gradient-to-br p-6 text-center",
-              issue.thumbnailTone,
-            )}
-          >
-            <div>
-              <Leaf className="mx-auto size-12 text-primary" aria-hidden="true" />
-              <p className="mt-3 font-semibold text-eco-ink">
-                Stimulus lingkungan
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Ilustrasi placeholder untuk gambar/video stimulus.
-              </p>
-            </div>
-          </div>
+          <StimulusMediaPreview issue={issue} asset={primaryAsset} />
           <div>
             <h2 className="text-xl font-semibold text-eco-ink">Narasi kasus</h2>
             <p className="mt-3 leading-7 text-muted-foreground">{issue.content}</p>
@@ -857,6 +851,108 @@ function StimulusPage({
         </CardContent>
       </Card>
     </StudentFrame>
+  );
+}
+
+function StimulusMediaPreview({
+  issue,
+  asset,
+}: {
+  issue: Issue;
+  asset?: StimulusAsset;
+}) {
+  const youtubeThumbnailUrl = asset
+    ? getYoutubeThumbnailUrl(asset.url)
+    : null;
+
+  if (asset && youtubeThumbnailUrl) {
+    return (
+      <a
+        className="group relative block min-h-56 overflow-hidden rounded-xl bg-eco-ink text-white shadow-sm outline-none transition focus-visible:ring-3 focus-visible:ring-ring/50"
+        href={asset.url}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Buka video stimulus ${asset.title}`}
+      >
+        <Image
+          src={youtubeThumbnailUrl}
+          alt={`Thumbnail video ${asset.title}`}
+          fill
+          loading="eager"
+          sizes="(max-width: 1024px) 100vw, 280px"
+          className="object-cover transition duration-300 group-hover:scale-105"
+        />
+        <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/10" />
+        <span className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-primary shadow-lg transition group-hover:scale-105">
+          <Play className="ml-0.5 size-6 fill-current" aria-hidden="true" />
+        </span>
+        <span className="absolute right-3 top-3 grid size-8 place-items-center rounded-full bg-black/35 text-white backdrop-blur">
+          <ExternalLink className="size-4" aria-hidden="true" />
+        </span>
+        <span className="absolute inset-x-0 bottom-0 p-4 text-left">
+          <span className="block text-sm font-semibold leading-5">
+            {asset.title}
+          </span>
+          <span className="mt-1 block line-clamp-2 text-xs leading-5 text-white/85">
+            {asset.description || "Ketuk untuk membuka video stimulus."}
+          </span>
+        </span>
+      </a>
+    );
+  }
+
+  if (asset) {
+    const assetLabel =
+      asset.assetType === "document"
+        ? "dokumen stimulus"
+        : asset.assetType === "image"
+          ? "gambar stimulus"
+          : asset.assetType === "video"
+            ? "video stimulus"
+            : "tautan stimulus";
+
+    return (
+      <a
+        className={cn(
+          "grid min-h-56 place-items-center rounded-xl bg-gradient-to-br p-6 text-center outline-none transition hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50",
+          issue.thumbnailTone,
+        )}
+        href={asset.url}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Buka ${assetLabel} ${asset.title}`}
+      >
+        <div>
+          <ExternalLink
+            className="mx-auto size-12 text-primary"
+            aria-hidden="true"
+          />
+          <p className="mt-3 font-semibold text-eco-ink">{asset.title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ketuk untuk membuka {assetLabel}.
+          </p>
+        </div>
+      </a>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "grid min-h-56 place-items-center rounded-xl bg-gradient-to-br p-6 text-center",
+        issue.thumbnailTone,
+      )}
+    >
+      <div>
+        <Leaf className="mx-auto size-12 text-primary" aria-hidden="true" />
+        <p className="mt-3 font-semibold text-eco-ink">
+          Stimulus lingkungan
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Ilustrasi placeholder untuk gambar/video stimulus.
+        </p>
+      </div>
+    </div>
   );
 }
 
