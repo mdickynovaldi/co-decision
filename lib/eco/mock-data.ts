@@ -250,7 +250,7 @@ export const recommendedActions = [
 export const rubricCriteria = [
   "Pemahaman masalah",
   "Kesesuaian peran",
-  "Kualitas diskusi",
+  "Argumentasi Keputusan",
   "Kualitas solusi",
   "Komitmen aksi",
 ];
