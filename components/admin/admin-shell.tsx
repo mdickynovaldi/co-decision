@@ -1538,6 +1538,15 @@ function StimulusAssetManager({
   );
 }
 
+function buildUniqueSlug(base: string, takenSlugs: Iterable<string>) {
+  const taken = new Set(takenSlugs);
+  const root = base.trim().toLowerCase() || "peran";
+  if (!taken.has(root)) return root;
+  let counter = 2;
+  while (taken.has(`${root}-${counter}`)) counter += 1;
+  return `${root}-${counter}`;
+}
+
 function RoleCardManager({
   data,
   onData,
@@ -1600,10 +1609,20 @@ function RoleCardManager({
 
   async function create(values: RoleCardCreateFormValues) {
     setServerMessage("");
+    const uniqueSlug = buildUniqueSlug(
+      values.slug,
+      data.roleCards.map((role) => role.slug),
+    );
     try {
-      const nextData = await createRoleCard(values);
+      const nextData = await createRoleCard({ ...values, slug: uniqueSlug });
       onData(nextData);
-      setServerMessage("Role card baru dibuat.");
+      const created = nextData.roleCards.find((role) => role.slug === uniqueSlug);
+      if (created) setSelectedId(created.id);
+      setServerMessage(
+        uniqueSlug === values.slug
+          ? "Role card baru dibuat."
+          : `Role card baru dibuat dengan slug "${uniqueSlug}".`,
+      );
     } catch (requestError) {
       setServerMessage(
         requestError instanceof Error ? requestError.message : "Gagal membuat.",
@@ -1672,11 +1691,6 @@ function RoleCardManager({
               {...form.register("interest")}
             />
             <PublishSelect control={form.control} name="isPublished" />
-            {serverMessage ? (
-              <p className="text-sm font-medium text-primary">
-                {serverMessage}
-              </p>
-            ) : null}
             <div className="flex flex-wrap gap-2">
               <Button type="submit" className="h-10 rounded-xl">
                 Simpan role
@@ -1717,6 +1731,9 @@ function RoleCardManager({
             Tambah role
           </Button>
         </form>
+        {serverMessage ? (
+          <p className="text-sm font-medium text-primary">{serverMessage}</p>
+        ) : null}
       </CardContent>
     </Card>
   );

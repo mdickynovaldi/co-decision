@@ -27,6 +27,14 @@ function fail(message: string, status = 400) {
 }
 
 function errorMessage(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23505"
+  ) {
+    return "Slug sudah dipakai role/konten lain. Gunakan slug yang berbeda.";
+  }
   if (error instanceof Error) return error.message;
   return "Terjadi kendala. Coba lagi sebentar.";
 }
