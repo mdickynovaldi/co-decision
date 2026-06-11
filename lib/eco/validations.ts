@@ -164,6 +164,14 @@ export const contentDeleteSchema = z.object({
   id: uuidSchema,
 });
 
+export const studentAnswerDeleteSchema = z.object({
+  kind: z.enum(["reflection", "discussion", "final", "rubric"]),
+  ids: z
+    .array(uuidSchema)
+    .min(1, "Pilih minimal satu data untuk dihapus.")
+    .max(200, "Terlalu banyak data dipilih sekaligus."),
+});
+
 export const groupDeleteSchema = z.object({
   groupCode: groupCodeSchema,
 });
@@ -256,6 +264,7 @@ export type ReflectionQuestionContentFormValues = z.infer<
 export type ReflectionQuestionCreateFormValues = z.infer<
   typeof reflectionQuestionCreateSchema
 >;
+export type StudentAnswerDeleteValues = z.infer<typeof studentAnswerDeleteSchema>;
 export type RoleCardContentFormValues = z.infer<typeof roleCardContentSchema>;
 export type RoleCardCreateFormValues = z.infer<typeof roleCardCreateSchema>;
 export type StimulusAssetContentFormValues = z.infer<

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getAdminDataset, getCurrentProfile, getCurrentUser } from "@/lib/eco/server/data";
 import {
   adminStudentQuerySchema,
@@ -16,6 +16,7 @@ import {
   rubricSchema,
   stimulusAssetContentSchema,
   stimulusAssetCreateSchema,
+  studentAnswerDeleteSchema,
 } from "@/lib/eco/validations";
 
 function ok(data: unknown) {
@@ -68,6 +69,58 @@ async function writeAudit(
     entity_id: entityId,
     metadata: { detail },
   });
+}
+
+// Service-role deletes bypass RLS, so re-check the per-class isolation that RLS
+// normally enforces: admins may act on any session, teachers only on sessions
+// inside classes they teach. Rejects the whole request if any id is out of scope.
+async function assertSessionsInScope(
+  admin: ReturnType<typeof createAdminClient>,
+  profile: { role: string },
+  userId: string,
+  sessionIds: string[],
+) {
+  if (profile.role === "admin" || profile.role === "super_admin") return;
+  if (!sessionIds.length) return;
+
+  const { data: sessions, error } = await admin
+    .from("student_sessions")
+    .select("id, class_id")
+    .in("id", sessionIds);
+
+  if (error) throw error;
+
+  const classIds = Array.from(
+    new Set(
+      (sessions ?? [])
+        .map((session) => session.class_id as string | null)
+        .filter((classId): classId is string => Boolean(classId)),
+    ),
+  );
+
+  const { data: ownedClasses, error: classError } = classIds.length
+    ? await admin
+        .from("classes")
+        .select("id")
+        .eq("teacher_id", userId)
+        .in("id", classIds)
+    : { data: [] as { id: string }[], error: null };
+
+  if (classError) throw classError;
+
+  const ownedClassIds = new Set(
+    (ownedClasses ?? []).map((row) => row.id as string),
+  );
+  const allInScope =
+    (sessions?.length ?? 0) === sessionIds.length &&
+    (sessions ?? []).every(
+      (session) =>
+        session.class_id && ownedClassIds.has(session.class_id as string),
+    );
+
+  if (!allInScope) {
+    throw new Error("Hanya bisa menghapus data siswa di kelas yang kamu ampu.");
+  }
 }
 
 export async function GET(request: Request) {
@@ -471,6 +524,116 @@ export async function POST(request: Request) {
         entityByKind[values.kind],
         values.id,
         "Konten dihapus dari Supabase.",
+      );
+
+      return ok(await getAdminDataset(supabase));
+    }
+
+    if (body.action === "deleteStudentAnswers") {
+      const values = studentAnswerDeleteSchema.parse(body.payload);
+      const { supabase, user, profile } = await requireStaff();
+      const admin = createAdminClient();
+
+      if (values.kind === "rubric") {
+        await assertSessionsInScope(admin, profile, user.id, values.ids);
+
+        const { error } = await admin
+          .from("rubric_scores")
+          .delete()
+          .in("student_session_id", values.ids);
+
+        if (error) throw error;
+
+        await writeAudit(
+          supabase,
+          user.id,
+          "content.delete",
+          "rubric_score",
+          null,
+          `Skor rubrik ${values.ids.length} siswa dihapus.`,
+        );
+
+        return ok(await getAdminDataset(supabase));
+      }
+
+      const tableByKind = {
+        reflection: "reflection_answers",
+        discussion: "discussion_results",
+        final: "final_solutions",
+      } as const;
+      const resetByKind = {
+        reflection: { status: "stimulus", progress_step: 3, completed_at: null },
+        discussion: { status: "discussion", progress_step: 6, completed_at: null },
+        final: { status: "final", progress_step: 8, completed_at: null },
+      } as const;
+      const entityByKind = {
+        reflection: "reflection_answer",
+        discussion: "discussion_result",
+        final: "final_solution",
+      } as const;
+
+      const table = tableByKind[values.kind];
+      const { data: rows, error: fetchError } = await admin
+        .from(table)
+        .select("id, student_session_id")
+        .in("id", values.ids);
+
+      if (fetchError) throw fetchError;
+
+      const sessionIds = Array.from(
+        new Set((rows ?? []).map((row) => row.student_session_id as string)),
+      );
+
+      await assertSessionsInScope(admin, profile, user.id, sessionIds);
+
+      if (values.kind === "reflection") {
+        // Reflection answers are stored one row per question. Deleting any
+        // answer reopens the whole stimulus step, so clear every answer of the
+        // affected students to keep the reset consistent.
+        if (sessionIds.length) {
+          const { error: deleteError } = await admin
+            .from("reflection_answers")
+            .delete()
+            .in("student_session_id", sessionIds);
+
+          if (deleteError) throw deleteError;
+        }
+      } else {
+        const { error: deleteError } = await admin
+          .from(table)
+          .delete()
+          .in("id", values.ids);
+
+        if (deleteError) throw deleteError;
+      }
+
+      if (sessionIds.length) {
+        const { error: resetError } = await admin
+          .from("student_sessions")
+          .update(resetByKind[values.kind])
+          .in("id", sessionIds);
+
+        if (resetError) throw resetError;
+
+        if (values.kind === "discussion") {
+          // Clear recorded Roblox clicks so the click count matches the
+          // reset-to-discussion state instead of showing stale events.
+          const { error: clicksError } = await admin
+            .from("roblox_map_clicks")
+            .delete()
+            .in("student_session_id", sessionIds);
+
+          if (clicksError) throw clicksError;
+        }
+      }
+
+      await writeAudit(
+        supabase,
+        user.id,
+        "content.delete",
+        entityByKind[values.kind],
+        null,
+        `${sessionIds.length} siswa: data ${entityByKind[values.kind]} dihapus dan progres direset agar bisa diisi ulang.`,
       );
 
       return ok(await getAdminDataset(supabase));

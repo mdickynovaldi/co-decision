@@ -65,6 +65,7 @@ export type AdminDataset = {
     createdAt: string;
   }>;
   discussions: Array<{
+    id: string;
     studentSessionId: string;
     studentName: string;
     issueTitle: string;
@@ -73,6 +74,7 @@ export type AdminDataset = {
     robloxClicks: number;
   }>;
   finalSolutions: Array<{
+    id: string;
     studentSessionId: string;
     studentName: string;
     groupCode: GroupCode;
@@ -81,11 +83,18 @@ export type AdminDataset = {
     personalCommitmentText: string;
   }>;
   reflectionSummaries: Array<{
+    id: string;
     studentSessionId: string;
     studentName: string;
     questionText: string;
     answerText: string;
     submittedAt?: string;
+  }>;
+  rubricScores: Array<{
+    studentSessionId: string;
+    studentName: string;
+    groupCode: GroupCode;
+    status: "draft" | "saved";
   }>;
 };
 
@@ -529,6 +538,7 @@ export async function getAdminDataset(
       const session = sessionById.get(discussion.student_session_id);
       const issue = session?.issue_id ? issues.get(session.issue_id) : undefined;
       return {
+        id: discussion.id,
         studentSessionId: discussion.student_session_id,
         studentName: session?.student_name ?? "Siswa",
         issueTitle: issue?.title ?? "Belum memilih isu",
@@ -541,6 +551,7 @@ export async function getAdminDataset(
       const session = sessionById.get(final.student_session_id);
       const role = session?.role_card_id ? roles.get(session.role_card_id) : undefined;
       return {
+        id: final.id,
         studentSessionId: final.student_session_id,
         studentName: session?.student_name ?? "Siswa",
         groupCode: session?.group_code ?? "A",
@@ -553,11 +564,21 @@ export async function getAdminDataset(
       const session = sessionById.get(answer.student_session_id);
       const question = questions.get(answer.question_id);
       return {
+        id: answer.id,
         studentSessionId: answer.student_session_id,
         studentName: session?.student_name ?? "Siswa",
         questionText: question?.questionText ?? "Pertanyaan",
         answerText: answer.answer_text,
         submittedAt: answer.submitted_at ?? undefined,
+      };
+    }),
+    rubricScores: (rubricsResult.data ?? []).map((rubric) => {
+      const session = sessionById.get(rubric.student_session_id);
+      return {
+        studentSessionId: rubric.student_session_id,
+        studentName: session?.student_name ?? "Siswa",
+        groupCode: session?.group_code ?? "A",
+        status: rubric.status,
       };
     }),
   };

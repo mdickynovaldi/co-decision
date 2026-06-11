@@ -8,6 +8,7 @@ import {
   loginSchema,
   registrationSchema,
   rubricSchema,
+  studentAnswerDeleteSchema,
 } from "@/lib/eco/validations";
 
 describe("Eco-Decision validation schemas", () => {
@@ -90,5 +91,32 @@ describe("Eco-Decision validation schemas", () => {
       groupCode: "A",
       status: "completed",
     });
+  });
+
+  it("validates student answer deletion payloads", () => {
+    expect(
+      studentAnswerDeleteSchema.safeParse({
+        kind: "reflection",
+        ids: ["00000000-0000-4000-8000-000000000000"],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      studentAnswerDeleteSchema.safeParse({ kind: "rubric", ids: [] }).success,
+    ).toBe(false);
+
+    expect(
+      studentAnswerDeleteSchema.safeParse({
+        kind: "unknown",
+        ids: ["00000000-0000-4000-8000-000000000000"],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      studentAnswerDeleteSchema.safeParse({
+        kind: "final",
+        ids: ["not-a-uuid"],
+      }).success,
+    ).toBe(false);
   });
 });

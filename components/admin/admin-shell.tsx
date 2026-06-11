@@ -30,6 +30,7 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
 
@@ -43,6 +44,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -67,6 +77,7 @@ import {
   createStimulusAsset,
   deleteContentItem,
   deleteGroupContent,
+  deleteStudentAnswers,
   getAdminDataset,
   saveIssueContent,
   saveReflectionQuestion,
@@ -202,13 +213,13 @@ export function AdminShell({
             />
           ) : null}
           {page === "jawaban-stimulus" ? (
-            <StimulusAnswersPage data={data} />
+            <StimulusAnswersPage data={data} onData={setData} />
           ) : null}
           {page === "diskusi-roblox" ? (
-            <RobloxDiscussionPage data={data} />
+            <RobloxDiscussionPage data={data} onData={setData} />
           ) : null}
           {page === "solusi-akhir" ? (
-            <FinalSolutionsAdminPage data={data} />
+            <FinalSolutionsAdminPage data={data} onData={setData} />
           ) : null}
           {page === "rubrik" ? (
             <RubricPage data={data} onData={setData} />
@@ -703,18 +714,163 @@ function StudentDetailPage({
   );
 }
 
-function StimulusAnswersPage({ data }: { data: AdminDataset }) {
+function useRowSelection() {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function setAll(ids: string[], checked: boolean) {
+    setSelected(checked ? new Set(ids) : new Set());
+  }
+
+  function clear() {
+    setSelected(new Set());
+  }
+
+  return { selected, toggle, setAll, clear };
+}
+
+function BulkDeleteControl({
+  count,
+  description,
+  onConfirm,
+  label = "Hapus terpilih",
+}: {
+  count: number;
+  description: string;
+  onConfirm: () => Promise<void>;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function changeOpen(next: boolean) {
+    if (busy) return;
+    setOpen(next);
+    if (!next) setError("");
+  }
+
+  async function confirm() {
+    setBusy(true);
+    setError("");
+    try {
+      await onConfirm();
+      setOpen(false);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Gagal menghapus.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="destructive"
+        className="h-10 rounded-xl"
+        disabled={count === 0}
+        onClick={() => {
+          setError("");
+          setOpen(true);
+        }}
+      >
+        <Trash2 className="size-4" aria-hidden="true" />
+        {label} ({count})
+      </Button>
+      <Dialog open={open} onOpenChange={changeOpen}>
+        <DialogContent showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Hapus {count} data terpilih?</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          {error ? (
+            <p className="text-sm font-medium text-destructive">{error}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => changeOpen(false)}
+              disabled={busy}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="rounded-xl"
+              onClick={confirm}
+              disabled={busy}
+            >
+              {busy ? "Menghapus..." : "Ya, hapus"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function StimulusAnswersPage({
+  data,
+  onData,
+}: {
+  data: AdminDataset;
+  onData: (data: AdminBackendState) => void;
+}) {
+  const { selected, toggle, setAll, clear } = useRowSelection();
+  const ids = data.reflectionSummaries.map((answer) => answer.id);
+  const allChecked = ids.length > 0 && ids.every((id) => selected.has(id));
+
+  async function handleDelete() {
+    const nextData = await deleteStudentAnswers(
+      "reflection",
+      Array.from(selected),
+    );
+    onData(nextData);
+    clear();
+  }
+
   return (
     <AdminSection
       eyebrow="Jawaban stimulus"
       title="Refleksi siswa"
       description="Jawaban refleksi siswa yang tersimpan di Supabase."
+      actions={
+        <BulkDeleteControl
+          count={selected.size}
+          description="Semua jawaban refleksi dari siswa terpilih dihapus permanen, dan progresnya dikembalikan ke tahap stimulus agar bisa mengisi ulang."
+          onConfirm={handleDelete}
+        />
+      }
     >
       <Card>
         <CardContent className="overflow-x-auto p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allChecked}
+                    onCheckedChange={(checked) => setAll(ids, checked === true)}
+                    aria-label="Pilih semua jawaban"
+                    disabled={ids.length === 0}
+                  />
+                </TableHead>
                 <TableHead>Siswa</TableHead>
                 <TableHead>Pertanyaan</TableHead>
                 <TableHead>Jawaban</TableHead>
@@ -722,9 +878,14 @@ function StimulusAnswersPage({ data }: { data: AdminDataset }) {
             </TableHeader>
             <TableBody>
               {data.reflectionSummaries.map((answer) => (
-                <TableRow
-                  key={`${answer.studentSessionId}-${answer.questionText}`}
-                >
+                <TableRow key={answer.id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selected.has(answer.id)}
+                      onCheckedChange={() => toggle(answer.id)}
+                      aria-label={`Pilih jawaban ${answer.studentName}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">
                     {answer.studentName}
                   </TableCell>
@@ -738,7 +899,7 @@ function StimulusAnswersPage({ data }: { data: AdminDataset }) {
               ))}
               {!data.reflectionSummaries.length ? (
                 <TableRow>
-                  <TableCell colSpan={3}>
+                  <TableCell colSpan={4}>
                     <EmptyState title="Belum ada jawaban refleksi" />
                   </TableCell>
                 </TableRow>
@@ -751,21 +912,53 @@ function StimulusAnswersPage({ data }: { data: AdminDataset }) {
   );
 }
 
-function RobloxDiscussionPage({ data }: { data: AdminDataset }) {
+function RobloxDiscussionPage({
+  data,
+  onData,
+}: {
+  data: AdminDataset;
+  onData: (data: AdminBackendState) => void;
+}) {
+  const { selected, toggle, clear } = useRowSelection();
+
+  async function handleDelete() {
+    const nextData = await deleteStudentAnswers(
+      "discussion",
+      Array.from(selected),
+    );
+    onData(nextData);
+    clear();
+  }
+
   return (
     <AdminSection
       eyebrow="Diskusi Roblox"
       title="Hasil observasi dan klik map"
       description="Melihat event Roblox dan hasil diskusi kelompok."
+      actions={
+        <BulkDeleteControl
+          count={selected.size}
+          description="Hasil diskusi terpilih dihapus permanen. Progres siswa terkait dikembalikan ke tahap diskusi agar bisa mengisi ulang."
+          onConfirm={handleDelete}
+        />
+      }
     >
       <div className="grid gap-4 md:grid-cols-2">
         {data.discussions.map((discussion) => (
-          <Card key={discussion.studentSessionId}>
+          <Card key={discussion.id}>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle>{discussion.studentName}</CardTitle>
-                  <CardDescription>{discussion.issueTitle}</CardDescription>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    className="mt-1"
+                    checked={selected.has(discussion.id)}
+                    onCheckedChange={() => toggle(discussion.id)}
+                    aria-label={`Pilih hasil diskusi ${discussion.studentName}`}
+                  />
+                  <div>
+                    <CardTitle>{discussion.studentName}</CardTitle>
+                    <CardDescription>{discussion.issueTitle}</CardDescription>
+                  </div>
                 </div>
                 <Badge variant="outline" className="rounded-lg">
                   {discussion.robloxClicks} klik
@@ -787,17 +980,44 @@ function RobloxDiscussionPage({ data }: { data: AdminDataset }) {
   );
 }
 
-function FinalSolutionsAdminPage({ data }: { data: AdminDataset }) {
+function FinalSolutionsAdminPage({
+  data,
+  onData,
+}: {
+  data: AdminDataset;
+  onData: (data: AdminBackendState) => void;
+}) {
+  const { selected, toggle, clear } = useRowSelection();
+
+  async function handleDelete() {
+    const nextData = await deleteStudentAnswers("final", Array.from(selected));
+    onData(nextData);
+    clear();
+  }
+
   return (
     <AdminSection
       eyebrow="Solusi akhir"
       title="Rekap solusi dan komitmen"
       description="Ringkasan solusi akhir untuk ditinjau guru."
+      actions={
+        <BulkDeleteControl
+          count={selected.size}
+          description="Solusi akhir terpilih dihapus permanen. Status siswa terkait dikembalikan dari 'selesai' ke tahap solusi akhir agar bisa mengisi ulang."
+          onConfirm={handleDelete}
+        />
+      }
     >
       <div className="grid gap-4">
         {data.finalSolutions.map((solution) => (
-          <Card key={solution.studentSessionId}>
-            <CardContent className="grid gap-4 p-5 md:grid-cols-[240px_1fr]">
+          <Card key={solution.id}>
+            <CardContent className="grid gap-4 p-5 md:grid-cols-[24px_240px_1fr]">
+              <Checkbox
+                className="mt-1"
+                checked={selected.has(solution.id)}
+                onCheckedChange={() => toggle(solution.id)}
+                aria-label={`Pilih solusi akhir ${solution.studentName}`}
+              />
               <div>
                 <h2 className="font-semibold text-eco-ink">
                   {solution.studentName}
@@ -837,6 +1057,17 @@ function RubricPage({
   const selectedStudent =
     data.students.find((student) => student.id === selectedStudentId) ??
     data.students[0];
+  const { selected, toggle, setAll, clear } = useRowSelection();
+  const scoredStudents = data.rubricScores;
+  const scoredIds = scoredStudents.map((score) => score.studentSessionId);
+  const allScoredChecked =
+    scoredIds.length > 0 && scoredIds.every((id) => selected.has(id));
+
+  async function handleDeleteScores() {
+    const nextData = await deleteStudentAnswers("rubric", Array.from(selected));
+    onData(nextData);
+    clear();
+  }
 
   return selectedStudent ? (
     <>
@@ -871,6 +1102,70 @@ function RubricPage({
                 ))}
               </SelectContent>
             </Select>
+          </CardContent>
+        </Card>
+      </AdminSection>
+      <AdminSection
+        eyebrow="Hapus penilaian"
+        title="Skor rubrik tersimpan"
+        description="Pilih siswa untuk menghapus skor dan feedback rubriknya. Siswa tetap ada dan bisa dinilai ulang."
+        actions={
+          <BulkDeleteControl
+            count={selected.size}
+            label="Hapus skor terpilih"
+            description="Skor dan feedback rubrik untuk siswa terpilih akan dihapus permanen. Siswa tetap ada dan bisa dinilai ulang."
+            onConfirm={handleDeleteScores}
+          />
+        }
+      >
+        <Card>
+          <CardContent className="overflow-x-auto p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allScoredChecked}
+                      onCheckedChange={(checked) =>
+                        setAll(scoredIds, checked === true)
+                      }
+                      aria-label="Pilih semua skor"
+                      disabled={scoredIds.length === 0}
+                    />
+                  </TableHead>
+                  <TableHead>Siswa</TableHead>
+                  <TableHead>Kelompok</TableHead>
+                  <TableHead>Status skor</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {scoredStudents.map((score) => (
+                  <TableRow key={score.studentSessionId}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(score.studentSessionId)}
+                        onCheckedChange={() => toggle(score.studentSessionId)}
+                        aria-label={`Pilih skor ${score.studentName}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {score.studentName}
+                    </TableCell>
+                    <TableCell>Kelompok {score.groupCode}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {score.status === "saved" ? "Tersimpan" : "Draft"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!scoredStudents.length ? (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <EmptyState title="Belum ada skor rubrik tersimpan" />
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </AdminSection>

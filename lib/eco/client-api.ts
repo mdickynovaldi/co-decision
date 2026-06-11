@@ -148,6 +148,13 @@ export function deleteGroupContent(groupCode: string) {
   return adminAction<AdminDataset>("deleteGroup", { groupCode });
 }
 
+export function deleteStudentAnswers(
+  kind: "reflection" | "discussion" | "final" | "rubric",
+  ids: string[],
+) {
+  return adminAction<AdminDataset>("deleteStudentAnswers", { kind, ids });
+}
+
 export function saveReflectionQuestion(values: ReflectionQuestionContentFormValues) {
   return adminAction<AdminDataset>("saveReflectionQuestion", values);
 }
